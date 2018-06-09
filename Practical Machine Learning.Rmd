@@ -1,0 +1,157 @@
+---
+title: "Practical Machine Learning"
+author: "Vivian Yeh"
+date: "June 9, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Practical Machine Learning
+
+
+Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+Choosing the prediction algorithm
+
+Steps Taken
+
+1.Tidy data. Remove columns with little/no data.
+
+2.Create Training and test data from traing data for cross validation checking
+
+3.Trial 3 methods Random Forrest, Gradient boosted model and Linear discriminant analysis
+
+Fine tune model through combinations of above methods, reduction of input variables or similar. The fine tuning will take into account accuracy first and speed of analysis second.
+
+
+```{r libraries}
+library(caret)
+library(ggplot2)
+library(randomForest)
+```
+
+```{r datsets}
+#read in training and testing data
+train <- read.csv("C:/Users/viyeh/Documents/Resume/Coursera/Practical Machine Learning/pml-training.csv", na.strings=c("NA","#DIV/0!",""))
+test <- read.csv("C:/Users/viyeh/Documents/Resume/Coursera/Practical Machine Learning/pml-testing.csv", na.strings=c("NA","#DIV/0!",""))
+
+names(train)
+str(train)
+```
+
+```{r outcome}
+summary(train$classe)
+#this is the outcome we want to predict
+```
+## Split training/testing data
+
+efore we do anything, we will set aside a subset of our training data for cross validation (40%).
+
+```{r Predict}
+#we want to predict the 'classe' variable using any other variable to predict with
+
+inTrain <- createDataPartition(y=train$classe, p=0.6, list=FALSE)
+myTrain <- train[inTrain, ]
+myTest <- train[-inTrain, ]
+dim(myTrain)
+
+dim(myTest) 
+```
+
+
+##Feature Selection
+
+Now we can tranform the data to only include the variables we will need to build our model. We will remove variables with near zero variance, variables with mostly missing data, and variables that are obviously not useful as predictors.
+
+```{r feature}
+#first we will remove variables with mostly NAs (use threshold of >75%)
+mytrain_SUB <- myTrain
+for (i in 1:length(myTrain)) {
+  if (sum(is.na(myTrain[ , i])) / nrow(myTrain) >= .75) {
+    for (j in 1:length(mytrain_SUB)) {
+      if (length(grep(names(myTrain[i]), names(mytrain_SUB)[j]))==1) {
+        mytrain_SUB <- mytrain_SUB[ , -j]
+      }
+    }
+  }
+}
+
+dim(mytrain_SUB)
+```
+
+```{r Remove}
+#names(mytrain_SUB)
+
+#remove columns that are not predictors
+mytrain_SUB2 <- mytrain_SUB[,8:length(mytrain_SUB)]
+
+#remove variables with near zero variance
+NZV <- nearZeroVar(mytrain_SUB2, saveMetrics = TRUE)
+NZV #all false, none to remove
+
+keep <- names(mytrain_SUB2)
+```
+## Random Forest Model
+
+I chose to use the random forest model to build my machine learning algorithm as it is appropriate for a classification problem as we have. Based on class lectures this model tends to be more accurate than some other classification models.
+
+Below I fit my model on my training data and then use my model to predict classe on my subset of data used for cross validation.
+
+```{r forest}
+#fit model- RANDOM FOREST
+set.seed(223)
+
+modFit <- randomForest(classe~., data = mytrain_SUB2)
+print(modFit)
+```
+
+```{r CrossValidation}
+#cross validation on my testing data
+#out of sample error
+predict1 <- predict(modFit, myTest, type = "class")
+confusionMatrix(myTest$classe, predict1)
+```
+## Error
+
+As we can see from the model summaries above, when we run the model on our test data for cross validation we get an accuracy of 99.4% that we can estimate to be our out of sample error. When the model is fitted to the training data used to build the model it shows 100% accuracy, which we can assume as our in sample error.
+
+Apply to final test set
+
+Finally, we apply our model to the final test data. Upon submission all predictions were correct!
+
+```{r Error}
+predict_FINAL <- predict(modFit, test, type = "class")
+print(predict_FINAL)
+```
+
+## Submission
+
+Prepare the submission:
+
+```{r submission}
+pml_write_files = function(x) {
+  n = length(x)
+  for (i in 1:n) {
+    filename = paste0("problem_id_", i, ".txt")
+    write.table(x[i], file=filename, quote=FALSE,row.names=FALSE, col.names=FALSE)
+  }
+}
+
+pml_write_files(predict_FINAL)
+```
